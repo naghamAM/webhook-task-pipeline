@@ -10,6 +10,32 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init:/docker-entrypoint-initdb.d
+  server:
+    image: node:20
+    container_name: webhook-server
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "npm install && npx tsx src/server.ts"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/webhook_pipeline"
+
+  worker:
+    image: node:20
+    container_name: webhook-worker
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "npm install && npx tsx src/worker/worker.ts"
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/webhook_pipeline"
 
 volumes:
   postgres_data:
