@@ -1,33 +1,35 @@
-# Webhook Task Processing Pipeline
+# Webhook-Driven Task Processing Pipeline
 
-This project is a webhook-driven task processing pipeline built with Node.js, TypeScript, PostgreSQL, and Docker.
+A simple service that receives webhooks, processes them, and prepares them 
+for delivery to subscribers.
 
-##  Overview
+## Overview
 
-The system receives webhook events, stores them as jobs, processes them asynchronously using a worker, and delivers the 
-processed results to subscribers with retry logic.
+This project is a simplified webhook processing pipeline.
 
-##  Architecture
+The service is responsible for:
 
-- API Server: Handles webhook ingestion and CRUD operations
-- PostgreSQL: Durable job and pipeline storage
-- Worker: Processes jobs asynchronously
-- Subscribers: Receive processed data via HTTP requests
+- Receiving incoming webhook events
+- Validating the request payload
+- Processing the event
+- Preparing the event for delivery
+- Supporting a scalable architecture for future queue/retry handling
 
-## ️ Features
+## Tech Stack
 
-- Webhook ingestion (`POST /webhooks/:sourceKey`)
-- Asynchronous job processing
-- Multiple processing actions:
-  - `add_field`
-  - `uppercase_name`
-  - `filter_fields`
-- Retry mechanism (up to 3 attempts)
-- Delivery attempt tracking
-- Full CRUD for pipelines
-- Dockerized database setup
+- Node.js
+- TypeScript
+- Express
+- Docker
+- Docker Compose
 
-##  Setup
+## Project Structure
 
 ```bash
-docker compose up -d
+src/
+  app.ts
+  index.ts
+Dockerfile
+docker-compose.yml
+package.json
+tsconfig.json
