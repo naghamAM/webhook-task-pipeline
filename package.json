@@ -1,7 +1,11 @@
 {
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js"
+    "test": "npm run build && node --test dist/pipelines/validation.test.js dist/worker/process-job.test.js dist/worker/deliver.test.js",
+    "start": "node dist/server.js",
+    "start:api": "node dist/server.js",
+    "start:worker": "node dist/worker/worker.js",
+    "db:migrate": "node dist/db/migrate.js"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
