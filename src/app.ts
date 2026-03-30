@@ -1,6 +1,7 @@
 import express from "express";
 import { randomUUID } from "crypto";
 import { db } from "./db/client";
+import { pipelinePatchSchema, pipelineSchema } from "./pipelines/validation";
 
 const app = express();
 
@@ -126,28 +127,80 @@ app.get("/jobs/:id", async (req, res) => {
   }
 });
 
-app.post("/pipelines", async (req, res) => {
+app.get("/jobs/:id/attempts", async (req, res) => {
   try {
-    const { source_key, action_type, action_config, subscriber_urls } = req.body;
+    const { id } = req.params;
 
-    if (!source_key || !action_type) {
-      return res.status(400).json({
+    const jobResult = await db.query(`SELECT id FROM jobs WHERE id = $1`, [id]);
+
+    if (jobResult.rows.length === 0) {
+      return res.status(404).json({
         success: false,
-        message: "source_key and action_type are required",
+        message: "Job not found",
       });
     }
 
-    const pipelineId = randomUUID();
-
-    await db.query(
+    const attemptsResult = await db.query(
       `
-      INSERT INTO pipelines (id, source_key, action_type, action_config, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
+      SELECT
+        id,
+        job_id,
+        subscriber_id,
+        attempt_number,
+        status,
+        response_status,
+        error_message,
+        created_at
+      FROM delivery_attempts
+      WHERE job_id = $1
+      ORDER BY created_at ASC
       `,
-      [pipelineId, source_key, action_type, action_config ?? {}]
+      [id]
     );
 
-    if (Array.isArray(subscriber_urls)) {
+    return res.json({
+      success: true,
+      jobId: id,
+      attempts: attemptsResult.rows,
+    });
+  } catch (error) {
+    console.error("Fetching delivery attempts failed:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
+app.post("/pipelines", async (req, res) => {
+  try {
+    const parsed = pipelineSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pipeline payload",
+        errors: parsed.error.issues,
+      });
+    }
+
+    const { source_key, action_type, action_config, subscriber_urls } =
+      parsed.data;
+
+    const pipelineId = randomUUID();
+
+    await db.query("BEGIN");
+
+    try {
+      await db.query(
+        `
+        INSERT INTO pipelines (id, source_key, action_type, action_config, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        `,
+        [pipelineId, source_key, action_type, action_config]
+      );
+
       for (const url of subscriber_urls) {
         await db.query(
           `
@@ -157,6 +210,11 @@ app.post("/pipelines", async (req, res) => {
           [randomUUID(), pipelineId, url]
         );
       }
+
+      await db.query("COMMIT");
+    } catch (error) {
+      await db.query("ROLLBACK");
+      throw error;
     }
 
     return res.status(201).json({
@@ -252,10 +310,22 @@ app.get("/pipelines/:id", async (req, res) => {
 app.put("/pipelines/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { source_key, action_type, action_config, subscriber_urls } = req.body;
+    const parsed = pipelinePatchSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pipeline payload",
+        errors: parsed.error.issues,
+      });
+    }
 
     const existingPipeline = await db.query(
-      `SELECT id FROM pipelines WHERE id = $1`,
+      `
+      SELECT id, source_key, action_type, action_config
+      FROM pipelines
+      WHERE id = $1
+      `,
       [id]
     );
 
@@ -266,32 +336,76 @@ app.put("/pipelines/:id", async (req, res) => {
       });
     }
 
-    await db.query(
+    const currentPipeline = existingPipeline.rows[0];
+    const subscribersResult = await db.query(
       `
-      UPDATE pipelines
-      SET source_key = $2,
-          action_type = $3,
-          action_config = $4
-      WHERE id = $1
+      SELECT target_url
+      FROM subscribers
+      WHERE pipeline_id = $1
+      ORDER BY created_at ASC
       `,
-      [id, source_key, action_type, action_config ?? {}]
+      [id]
     );
 
-    if (Array.isArray(subscriber_urls)) {
+    const nextSourceKey = parsed.data.source_key ?? currentPipeline.source_key;
+    const nextActionType =
+      parsed.data.action_type ?? currentPipeline.action_type;
+    const nextActionConfig =
+      parsed.data.action_config ?? currentPipeline.action_config;
+    const nextSubscriberUrls =
+      parsed.data.subscriber_urls ??
+      subscribersResult.rows.map((row) => row.target_url);
+
+    const mergedValidation = pipelineSchema.safeParse({
+      source_key: nextSourceKey,
+      action_type: nextActionType,
+      action_config: nextActionConfig,
+      subscriber_urls: nextSubscriberUrls,
+    });
+
+    if (!mergedValidation.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pipeline payload",
+        errors: mergedValidation.error.issues,
+      });
+    }
+
+    await db.query("BEGIN");
+
+    try {
       await db.query(
-        `DELETE FROM subscribers WHERE pipeline_id = $1`,
-        [id]
+        `
+        UPDATE pipelines
+        SET source_key = $2,
+            action_type = $3,
+            action_config = $4
+        WHERE id = $1
+        `,
+        [id, nextSourceKey, nextActionType, nextActionConfig]
       );
 
-      for (const url of subscriber_urls) {
+      if (Array.isArray(parsed.data.subscriber_urls)) {
         await db.query(
-          `
-          INSERT INTO subscribers (id, pipeline_id, target_url, created_at)
-          VALUES ($1, $2, $3, NOW())
-          `,
-          [randomUUID(), id, url]
+          `DELETE FROM subscribers WHERE pipeline_id = $1`,
+          [id]
         );
+
+        for (const url of parsed.data.subscriber_urls) {
+          await db.query(
+            `
+            INSERT INTO subscribers (id, pipeline_id, target_url, created_at)
+            VALUES ($1, $2, $3, NOW())
+            `,
+            [randomUUID(), id, url]
+          );
+        }
       }
+
+      await db.query("COMMIT");
+    } catch (error) {
+      await db.query("ROLLBACK");
+      throw error;
     }
 
     return res.json({
