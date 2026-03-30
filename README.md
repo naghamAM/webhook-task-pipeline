@@ -8,6 +8,18 @@ URLs.
 The stack is intentionally aligned with the Boot.dev TypeScript final project:
 TypeScript, PostgreSQL, Docker, Docker Compose, and GitHub Actions.
 
+## Requirement Checklist
+
+- CRUD API for managing pipelines
+- Webhook ingestion endpoint that queues jobs for background processing
+- Background worker that claims and executes pending jobs
+- Three processing action types
+- Subscriber delivery with retry history
+- Job status and delivery-attempt inspection APIs
+- One-command local startup with `docker compose up --build`
+- GitHub Actions CI pipeline
+- Documentation for setup, architecture, and design decisions
+
 ## Features
 
 - CRUD API for pipelines
@@ -114,6 +126,16 @@ This compiles the project and runs the Node test suite against the built files.
 curl http://localhost:3000/health
 ```
 
+### Seeded demo data
+
+The repository includes seeded pipelines in
+[seed.sql](/Users/alaamarneh/webhook-task-pipeline/src/db/seed.sql). If you
+want a quick smoke test after startup, you can use:
+
+- `demo-source` for `add_field`
+- `uppercase-source` for `uppercase_name`
+- `filter-source` for `filter_fields`
+
 ## API Reference
 
 ### Create pipeline
@@ -199,6 +221,12 @@ Expected response:
 
 This endpoint returns the retry history recorded for each subscriber delivery.
 
+### Example validation error
+
+If a pipeline payload is invalid, the API returns `400 Bad Request` with
+structured validation issues. For example, `filter_fields` without
+`allowedFields` is rejected before it reaches the worker.
+
 ## Example Demo Flow
 
 1. Start the stack with `docker compose up --build`
@@ -210,6 +238,9 @@ This endpoint returns the retry history recorded for each subscriber delivery.
 
 That is a good flow for the required video demo.
 
+A narrated demo script is available in
+[DEMO.md](/Users/alaamarneh/webhook-task-pipeline/DEMO.md).
+
 ## Design Decisions
 
 - PostgreSQL is used as both persistence and the simple job queue.
@@ -218,6 +249,8 @@ That is a good flow for the required video demo.
   - Webhook ingestion stays fast because the API only stores a job.
 - Delivery attempts are stored explicitly.
   - This makes retry behavior visible for debugging and evaluation.
+- Runtime validation happens at the API boundary.
+  - Invalid pipeline definitions are rejected before they can create broken jobs.
 - Docker Compose runs all services together.
   - This satisfies the project requirement that the whole system runs locally in
     one command.
@@ -249,6 +282,14 @@ There is also an optional Google Cloud deployment workflow in
 [deploy-gcloud.yml](/Users/alaamarneh/webhook-task-pipeline/.github/workflows/deploy-gcloud.yml).
 That workflow is a stretch deployment path and is not required to understand the
 core project.
+
+## Testing Strategy
+
+- Validation tests cover action-specific pipeline rules.
+- Worker action tests cover all three processing modes.
+- Delivery tests cover success, retry, and failure behavior.
+- CI runs the same build, test, and Docker validation steps on every push and
+  pull request.
 
 ## Project Structure
 
