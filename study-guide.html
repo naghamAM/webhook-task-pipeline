@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Webhook Pipeline Study Guide</title>
+    <style>
+      :root {
+        --bg: #f4efe7;
+        --panel: #fffaf3;
+        --panel-strong: #f8ead2;
+        --ink: #1f1b16;
+        --muted: #65594b;
+        --line: #d8c7ae;
+        --accent: #ad4e1a;
+        --accent-soft: #f2c8a9;
+        --success: #2f6a4f;
+        --warn: #8e5b12;
+        --shadow: 0 18px 45px rgba(73, 51, 28, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top right, rgba(173, 78, 26, 0.1), transparent 30%),
+          linear-gradient(180deg, #f9f4ec 0%, var(--bg) 100%);
+        color: var(--ink);
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .shell {
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 32px 0 64px;
+      }
+
+      .hero {
+        background: linear-gradient(135deg, rgba(255, 250, 243, 0.98), rgba(248, 234, 210, 0.96));
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .hero-inner {
+        display: grid;
+        grid-template-columns: 1.4fr 0.8fr;
+        gap: 24px;
+        padding: 32px;
+      }
+
+      .eyebrow {
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        font-weight: 700;
+        line-height: 1.1;
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(2.3rem, 4vw, 4.2rem);
+        margin-bottom: 12px;
+      }
+
+      h2 {
+        font-size: 1.7rem;
+        margin-bottom: 14px;
+      }
+
+      h3 {
+        font-size: 1.1rem;
+        margin-bottom: 10px;
+      }
+
+      p {
+        margin: 0 0 14px;
+      }
+
+      .hero p {
+        max-width: 62ch;
+      }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        align-self: start;
+      }
+
+      .stat {
+        background: rgba(255, 255, 255, 0.74);
+        border: 1px solid rgba(216, 199, 174, 0.9);
+        border-radius: 18px;
+        padding: 16px;
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 1.7rem;
+        margin-bottom: 4px;
+      }
+
+      .topnav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 18px 0 22px;
+        backdrop-filter: blur(14px);
+        background: rgba(249, 244, 236, 0.72);
+        border: 1px solid rgba(216, 199, 174, 0.7);
+        border-radius: 999px;
+        padding: 10px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .topnav a {
+        text-decoration: none;
+        color: var(--ink);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 10px 14px;
+        font-size: 0.95rem;
+      }
+
+      .topnav a:hover {
+        border-color: var(--line);
+        background: rgba(255, 255, 255, 0.6);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 22px;
+      }
+
+      .column {
+        display: grid;
+        gap: 22px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+        padding: 24px;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        background: var(--panel-strong);
+        color: var(--accent);
+        margin-bottom: 12px;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .flow {
+        display: grid;
+        gap: 12px;
+        counter-reset: step;
+      }
+
+      .flow-item {
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        gap: 14px;
+        align-items: start;
+      }
+
+      .flow-item::before {
+        counter-increment: step;
+        content: counter(step);
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: white;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 20px;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      code,
+      pre {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      pre {
+        margin: 0;
+        padding: 14px;
+        overflow: auto;
+        border-radius: 18px;
+        border: 1px solid #e4d6c1;
+        background: #261d16;
+        color: #f8efe3;
+      }
+
+      .qa-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.6);
+        padding: 14px 16px;
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 700;
+        list-style: none;
+      }
+
+      summary::-webkit-details-marker {
+        display: none;
+      }
+
+      details p,
+      details ul {
+        margin-top: 12px;
+      }
+
+      .topic {
+        border-left: 4px solid var(--accent-soft);
+        padding-left: 12px;
+      }
+
+      .callout {
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+      }
+
+      .callout.success {
+        background: rgba(47, 106, 79, 0.08);
+        border-color: rgba(47, 106, 79, 0.22);
+      }
+
+      .callout.warn {
+        background: rgba(142, 91, 18, 0.08);
+        border-color: rgba(142, 91, 18, 0.22);
+      }
+
+      .callout strong {
+        color: var(--success);
+      }
+
+      .warn strong {
+        color: var(--warn);
+      }
+
+      .mini-map {
+        display: grid;
+        gap: 10px;
+      }
+
+      .mini-map div {
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid var(--line);
+      }
+
+      .sticky-note {
+        position: sticky;
+        top: 88px;
+      }
+
+      .quiz {
+        display: grid;
+        gap: 10px;
+      }
+
+      .quiz button {
+        border: 0;
+        border-radius: 14px;
+        padding: 12px 14px;
+        text-align: left;
+        background: #efe1ca;
+        color: var(--ink);
+        cursor: pointer;
+        font: inherit;
+      }
+
+      .quiz button:hover {
+        background: #e8d5b8;
+      }
+
+      .footer {
+        margin-top: 28px;
+        color: var(--muted);
+        text-align: center;
+        font-size: 0.95rem;
+      }
+
+      @media (max-width: 980px) {
+        .hero-inner,
+        .layout,
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+
+        .sticky-note {
+          position: static;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="hero">
+        <div class="hero-inner">
+          <div>
+            <div class="eyebrow">Boot.dev Final Project Prep</div>
+            <h1>Webhook Pipeline Learning Board</h1>
+            <p>
+              This page is your compact study system for the project. Use it to
+              understand how the app works, rehearse likely evaluator questions,
+              and build confidence before the demo.
+            </p>
+            <div class="callout success">
+              <strong>Main story to remember:</strong>
+              the API receives a webhook, stores a job in PostgreSQL, the worker
+              processes it asynchronously, then tries to deliver the result to
+              subscribers with retries and delivery history.
+            </div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat">
+              <strong>3</strong>
+              Processing actions
+            </div>
+            <div class="stat">
+              <strong>4</strong>
+              Main DB tables
+            </div>
+            <div class="stat">
+              <strong>3</strong>
+              Runtime services
+            </div>
+            <div class="stat">
+              <strong>11</strong>
+              Automated tests
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <nav class="topnav">
+        <a href="#mental-model">Mental Model</a>
+        <a href="#request-flow">Request Flow</a>
+        <a href="#code-map">Code Map</a>
+        <a href="#data-model">Data Model</a>
+        <a href="#qa">Q&amp;A</a>
+        <a href="#topics">Study Topics</a>
+        <a href="#demo">Demo Plan</a>
+        <a href="#rapid-fire">Rapid Fire</a>
+      </nav>
+
+      <div class="layout">
+        <main class="column">
+          <section class="card" id="mental-model">
+            <span class="badge">Mental Model</span>
+            <h2>What The App Actually Is</h2>
+            <p>
+              Think of this project as a very small event automation platform.
+              A pipeline connects:
+            </p>
+            <ul>
+              <li>A source URL that receives incoming webhook events</li>
+              <li>A processing action that transforms the payload</li>
+              <li>One or more subscriber URLs that receive the transformed result</li>
+            </ul>
+            <p>
+              The key architectural choice is that webhook ingestion is fast and
+              asynchronous. The API does not do processing inline. It only saves
+              the job, and the worker handles the slow work later.
+            </p>
+          </section>
+
+          <section class="card" id="request-flow">
+            <span class="badge">Core Flow</span>
+            <h2>End-To-End Request Lifecycle</h2>
+            <div class="flow">
+              <div class="flow-item">
+                <div>
+                  <h3>Pipeline setup</h3>
+                  <p>
+                    A user creates a pipeline with `source_key`, `action_type`,
+                    `action_config`, and `subscriber_urls`.
+                  </p>
+                </div>
+              </div>
+              <div class="flow-item">
+                <div>
+                  <h3>Webhook ingestion</h3>
+                  <p>
+                    `POST /webhooks/:sourceKey` finds the pipeline and inserts a
+                    new job with status `pending`.
+                  </p>
+                </div>
+              </div>
+              <div class="flow-item">
+                <div>
+                  <h3>Worker claims work</h3>
+                  <p>
+                    The worker atomically updates the next `pending` job to
+                    `processing` using SQL and `FOR UPDATE SKIP LOCKED`.
+                  </p>
+                </div>
+              </div>
+              <div class="flow-item">
+                <div>
+                  <h3>Payload processing</h3>
+                  <p>
+                    The worker runs one of three action types:
+                    `add_field`, `uppercase_name`, or `filter_fields`.
+                  </p>
+                </div>
+              </div>
+              <div class="flow-item">
+                <div>
+                  <h3>Subscriber delivery</h3>
+                  <p>
+                    The worker POSTs the processed payload to each subscriber
+                    with retry logic and request timeout handling.
+                  </p>
+                </div>
+              </div>
+              <div class="flow-item">
+                <div>
+                  <h3>Observability</h3>
+                  <p>
+                    Every delivery attempt is saved in the database, and the job
+                    ends as either `completed` or `failed`.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" id="code-map">
+            <span class="badge">Code Map</span>
+            <h2>Where To Read What</h2>
+            <div class="grid-2">
+              <div class="topic">
+                <h3><a href="/Users/alaamarneh/webhook-task-pipeline/src/app.ts">`src/app.ts`</a></h3>
+                <p>
+                  API entry point. Contains health check, pipeline CRUD,
+                  webhook ingestion, job lookup, and delivery-attempt endpoints.
+                </p>
+              </div>
+              <div class="topic">
+                <h3><a href="/Users/alaamarneh/webhook-task-pipeline/src/server.ts">`src/server.ts`</a></h3>
+                <p>
+                  Thin bootstrap that starts the Express app on the configured port.
+                </p>
+              </div>
+              <div class="topic">
+                <h3><a href="/Users/alaamarneh/webhook-task-pipeline/src/worker/worker.ts">`src/worker/worker.ts`</a></h3>
+                <p>
+                  Main background loop. Claims jobs, processes payloads, records
+                  attempts, and updates final job status.
+                </p>
+              </div>
+              <div class="topic">
+                <h3><a href="/Users/alaamarneh/webhook-task-pipeline/src/worker/process-job.ts">`src/worker/process-job.ts`</a></h3>
+                <p>
+                  Pure transformation logic for the three action types. This is
+                  the easiest file to explain in an interview.
+                </p>
+              </div>
+              <div class="topic">
+                <h3><a href="/Users/alaamarneh/webhook-task-pipeline/src/worker/deliver.ts">`src/worker/deliver.ts`</a></h3>
+                <p>
+                  Subscriber delivery logic. Handles timeouts, retries, success,
+                  and failure results.
+                </p>
+              </div>
+              <div class="topic">
+                <h3><a href="/Users/alaamarneh/webhook-task-pipeline/src/pipelines/validation.ts">`src/pipelines/validation.ts`</a></h3>
+                <p>
+                  API validation rules. This file explains why invalid pipeline
+                  definitions are rejected before the worker sees them.
+                </p>
+              </div>
+              <div class="topic">
+                <h3><a href="/Users/alaamarneh/webhook-task-pipeline/src/db/schema.sql">`src/db/schema.sql`</a></h3>
+                <p>
+                  Main schema: pipelines, subscribers, jobs, delivery_attempts.
+                </p>
+              </div>
+              <div class="topic">
+                <h3><a href="/Users/alaamarneh/webhook-task-pipeline/docker-compose.yml">`docker-compose.yml`</a></h3>
+                <p>
+                  Local runtime shape. Postgres, migration job, API server, and
+                  worker come up together.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" id="data-model">
+            <span class="badge">Database</span>
+            <h2>Data Model You Should Be Able To Explain</h2>
+            <div class="mini-map">
+              <div>
+                <h3>`pipelines`</h3>
+                <p>
+                  Stores the pipeline definition: the source key, the selected
+                  action, and the config for that action.
+                </p>
+              </div>
+              <div>
+                <h3>`subscribers`</h3>
+                <p>
+                  Stores destination URLs for each pipeline. One pipeline can
+                  have many subscribers.
+                </p>
+              </div>
+              <div>
+                <h3>`jobs`</h3>
+                <p>
+                  Stores inbound webhook events, current job status, processed
+                  payload, and any top-level error message.
+                </p>
+              </div>
+              <div>
+                <h3>`delivery_attempts`</h3>
+                <p>
+                  Stores each retry attempt so you can inspect failure history
+                  and prove retry behavior works.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" id="qa">
+            <span class="badge">Evaluator Q&amp;A</span>
+            <h2>Questions You Are Likely To Get</h2>
+            <div class="qa-list">
+              <details>
+                <summary>Why did you separate the API and worker?</summary>
+                <p>
+                  So webhook ingestion stays fast and reliable. The API just
+                  validates input and stores a job. Processing and delivery are
+                  slower operations and belong in the background worker.
+                </p>
+              </details>
+              <details>
+                <summary>Why use PostgreSQL as the queue?</summary>
+                <p>
+                  It keeps the project small, easy to run, and aligned with the
+                  assignment. PostgreSQL already stores the app data, and it can
+                  support a simple pending-job queue for this scope.
+                </p>
+              </details>
+              <details>
+                <summary>How do you avoid processing a job twice?</summary>
+                <p>
+                  The worker claims jobs with an atomic SQL update and
+                  `FOR UPDATE SKIP LOCKED`. That reduces the chance of two
+                  workers taking the same pending job.
+                </p>
+              </details>
+              <details>
+                <summary>What happens if delivery fails?</summary>
+                <p>
+                  The worker retries up to three times, stores each attempt in
+                  `delivery_attempts`, and marks the job as `failed` if delivery
+                  still does not succeed.
+                </p>
+              </details>
+              <details>
+                <summary>How do you validate pipeline definitions?</summary>
+                <p>
+                  The API uses `zod` validation. It checks general shape and also
+                  action-specific config rules, like requiring `fieldName` for
+                  `add_field` and `allowedFields` for `filter_fields`.
+                </p>
+              </details>
+              <details>
+                <summary>Why store delivery attempts separately from jobs?</summary>
+                <p>
+                  Because job-level status is not enough to debug failures. A
+                  separate attempts table preserves retry history and gives much
+                  better observability.
+                </p>
+              </details>
+              <details>
+                <summary>What are the three processing actions?</summary>
+                <ul>
+                  <li>`add_field`: adds a configured field/value to the payload</li>
+                  <li>`uppercase_name`: uppercases `payload.data.name`</li>
+                  <li>`filter_fields`: keeps only configured top-level fields</li>
+                </ul>
+              </details>
+              <details>
+                <summary>What did you do for reliability?</summary>
+                <ul>
+                  <li>Asynchronous processing instead of inline webhook work</li>
+                  <li>Atomic job claiming</li>
+                  <li>Retries for subscriber delivery</li>
+                  <li>Request timeouts for outbound delivery</li>
+                  <li>Persisted error messages and attempt history</li>
+                  <li>Transactional pipeline create/update operations</li>
+                </ul>
+              </details>
+              <details>
+                <summary>What would you improve next?</summary>
+                <p>
+                  Replace DB polling with a dedicated queue, add authentication
+                  or webhook signatures, and expose richer subscriber-level job
+                  summaries.
+                </p>
+              </details>
+              <details>
+                <summary>What is the easiest way to explain the worker file?</summary>
+                <p>
+                  Say it in four verbs: claim, process, deliver, record. The
+                  worker claims a job, processes the payload, delivers it to
+                  subscribers, and records both final job state and attempt history.
+                </p>
+              </details>
+            </div>
+          </section>
+
+          <section class="card" id="topics">
+            <span class="badge">Study Plan</span>
+            <h2>Key Topics To Learn Before The Demo</h2>
+            <div class="grid-2">
+              <div class="topic">
+                <h3>Express request lifecycle</h3>
+                <p>
+                  Know how requests enter `app.ts`, how params and body data are
+                  used, and where responses are returned.
+                </p>
+              </div>
+              <div class="topic">
+                <h3>PostgreSQL basics</h3>
+                <p>
+                  Understand the tables, foreign keys, and why the app stores
+                  jobs and attempts separately.
+                </p>
+              </div>
+              <div class="topic">
+                <h3>Background job processing</h3>
+                <p>
+                  Be able to explain why asynchronous workers are useful and why
+                  they are better than processing the webhook inline.
+                </p>
+              </div>
+              <div class="topic">
+                <h3>Retry logic and timeouts</h3>
+                <p>
+                  Know why retries exist, why timeouts matter, and what happens
+                  after repeated delivery failures.
+                </p>
+              </div>
+              <div class="topic">
+                <h3>Validation with Zod</h3>
+                <p>
+                  Understand why validation belongs at the API boundary and what
+                  action-specific validation this app performs.
+                </p>
+              </div>
+              <div class="topic">
+                <h3>Docker Compose flow</h3>
+                <p>
+                  Be ready to explain the four services: `postgres`, `migrate`,
+                  `server`, and `worker`.
+                </p>
+              </div>
+              <div class="topic">
+                <h3>CI workflow</h3>
+                <p>
+                  The pipeline installs deps, builds the project, runs tests,
+                  validates Compose, and builds the Docker image.
+                </p>
+              </div>
+              <div class="topic">
+                <h3>Tradeoffs</h3>
+                <p>
+                  Practice explaining that this is intentionally simple and that
+                  some production-grade improvements were left for future work.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" id="demo">
+            <span class="badge">Demo Coaching</span>
+            <h2>Best 3-Minute Architecture Explanation</h2>
+            <pre>1. This app lets users define pipelines.
+2. Each pipeline has a source key, a processing action, and subscriber URLs.
+3. When a webhook hits the source URL, the API stores a pending job in PostgreSQL.
+4. A separate worker claims that job in the background.
+5. The worker transforms the payload and sends it to subscribers.
+6. Each delivery attempt is stored, and the job ends as completed or failed.
+7. Docker Compose runs the full stack, and CI verifies build, tests, and Docker config.</pre>
+          </section>
+
+          <section class="card" id="rapid-fire">
+            <span class="badge">Practice Mode</span>
+            <h2>Rapid-Fire Questions</h2>
+            <div class="quiz">
+              <button data-answer="Because webhook ingestion should stay fast, and processing plus delivery can be slow or fail.">
+                Why not process webhooks synchronously?
+              </button>
+              <button data-answer="The worker uses an atomic SQL claim query with FOR UPDATE SKIP LOCKED.">
+                How do you reduce duplicate job processing?
+              </button>
+              <button data-answer="The job stores overall state, but delivery_attempts stores the retry history for debugging and observability.">
+                Why keep delivery_attempts separately?
+              </button>
+              <button data-answer="add_field, uppercase_name, and filter_fields.">
+                What action types do you support?
+              </button>
+              <button data-answer="The API validates pipeline shape and action-specific config rules using Zod before writing to the database.">
+                How do you prevent invalid pipelines?
+              </button>
+            </div>
+            <div class="callout warn" id="quiz-answer" style="margin-top: 14px;">
+              <strong>Click a question to reveal a model answer.</strong>
+            </div>
+          </section>
+        </main>
+
+        <aside class="column">
+          <div class="sticky-note">
+            <section class="card">
+              <span class="badge">Memory Anchor</span>
+              <h2>One Sentence To Memorize</h2>
+              <p>
+                “This project is a webhook-driven pipeline service where the API
+                queues work, the worker processes it asynchronously, and the
+                result is delivered to subscribers with retry tracking.”
+              </p>
+            </section>
+
+            <section class="card">
+              <span class="badge">Strengths</span>
+              <h2>What You Should Emphasize</h2>
+              <ul>
+                <li>Clear separation between API and worker responsibilities</li>
+                <li>Reasonable schema design for the project scope</li>
+                <li>Observable retry behavior through persisted delivery attempts</li>
+                <li>Validation at the API layer instead of trusting raw input</li>
+                <li>Reproducible local setup with Docker Compose and CI</li>
+              </ul>
+            </section>
+
+            <section class="card">
+              <span class="badge">Weak Spots</span>
+              <h2>Be Honest If Asked</h2>
+              <ul>
+                <li>PostgreSQL polling is simpler than a real message queue</li>
+                <li>No auth or signature verification yet</li>
+                <li>No metrics or dashboard</li>
+                <li>Tests focus on core behavior, not full API integration</li>
+              </ul>
+            </section>
+
+            <section class="card">
+              <span class="badge">Demo Tips</span>
+              <h2>How To Sound Confident</h2>
+              <ul>
+                <li>Talk in flows, not files, first</li>
+                <li>Explain the why behind each decision</li>
+                <li>Use concrete examples from a webhook payload</li>
+                <li>Say what you simplified and why</li>
+                <li>Keep future improvements realistic and specific</li>
+              </ul>
+            </section>
+          </div>
+        </aside>
+      </div>
+
+      <p class="footer">
+        Local study page only. This file is not part of the committed project unless you choose to add it later.
+      </p>
+    </div>
+
+    <script>
+      const answerBox = document.getElementById("quiz-answer");
+      const buttons = document.querySelectorAll(".quiz button");
+
+      for (const button of buttons) {
+        button.addEventListener("click", () => {
+          answerBox.innerHTML =
+            "<strong>Model answer:</strong> " + button.dataset.answer;
+        });
+      }
+    </script>
+  </body>
+</html>

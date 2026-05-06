@@ -1,0 +1,130 @@
+name: Deploy To Google Cloud
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+  GAR_LOCATION: ${{ vars.GAR_LOCATION || vars.GCP_REGION || 'us-central1' }}
+  GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY || 'webhook-task-pipeline' }}
+  IMAGE_NAME: webhook-task-pipeline
+  API_SERVICE: ${{ vars.CLOUD_RUN_API_SERVICE || 'webhook-api' }}
+  WORKER_SERVICE: ${{ vars.CLOUD_RUN_WORKER_SERVICE || 'webhook-worker' }}
+  MIGRATION_JOB: ${{ vars.CLOUD_RUN_MIGRATION_JOB || 'webhook-db-migrate' }}
+  DATABASE_SECRET_NAME: ${{ vars.DATABASE_SECRET_NAME || 'webhook-database-url' }}
+  CLOUD_SQL_CONNECTION_NAME: ${{ vars.CLOUD_SQL_CONNECTION_NAME }}
+  WORKER_POLL_INTERVAL_MS: ${{ vars.WORKER_POLL_INTERVAL_MS || '1000' }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GAR_LOCATION}-docker.pkg.dev" --quiet
+
+      - name: Ensure Artifact Registry repository exists
+        run: |
+          gcloud artifacts repositories describe "${GAR_REPOSITORY}" \
+            --location "${GAR_LOCATION}" >/dev/null 2>&1 || \
+          gcloud artifacts repositories create "${GAR_REPOSITORY}" \
+            --repository-format docker \
+            --location "${GAR_LOCATION}" \
+            --description "Containers for webhook-task-pipeline"
+
+      - name: Build image URIs
+        id: image
+        run: |
+          IMAGE_URI="${GAR_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}"
+          echo "image_uri=${IMAGE_URI}" >> "${GITHUB_OUTPUT}"
+          echo "image_sha=${IMAGE_URI}:${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "image_latest=${IMAGE_URI}:latest" >> "${GITHUB_OUTPUT}"
+
+      - name: Build Docker image
+        run: docker build -t "${{ steps.image.outputs.image_sha }}" -t "${{ steps.image.outputs.image_latest }}" .
+
+      - name: Push Docker image
+        run: |
+          docker push "${{ steps.image.outputs.image_sha }}"
+          docker push "${{ steps.image.outputs.image_latest }}"
+
+      - name: Build optional Cloud SQL flags
+        id: cloudsql
+        run: |
+          if [ -n "${CLOUD_SQL_CONNECTION_NAME}" ]; then
+            echo "service_flag=--set-cloudsql-instances=${CLOUD_SQL_CONNECTION_NAME}" >> "${GITHUB_OUTPUT}"
+            echo "job_flag=--set-cloudsql-instances=${CLOUD_SQL_CONNECTION_NAME}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "service_flag=" >> "${GITHUB_OUTPUT}"
+            echo "job_flag=" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Deploy migration job and run schema update
+        run: |
+          gcloud run jobs deploy "${MIGRATION_JOB}" \
+            --image "${{ steps.image.outputs.image_sha }}" \
+            --region "${GCP_REGION}" \
+            --command node \
+            --args dist/db/migrate.js \
+            --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest" \
+            ${{ steps.cloudsql.outputs.job_flag }} \
+            --task-timeout 10m \
+            --max-retries 1 \
+            --execute-now \
+            --wait
+
+      - name: Deploy API service
+        run: |
+          gcloud run deploy "${API_SERVICE}" \
+            --image "${{ steps.image.outputs.image_sha }}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 3000 \
+            --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest" \
+            ${{ steps.cloudsql.outputs.service_flag }}
+
+      - name: Deploy worker service
+        run: |
+          gcloud run deploy "${WORKER_SERVICE}" \
+            --image "${{ steps.image.outputs.image_sha }}" \
+            --region "${GCP_REGION}" \
+            --platform managed \
+            --no-allow-unauthenticated \
+            --ingress internal \
+            --no-default-url \
+            --port 3000 \
+            --command node \
+            --args dist/worker/worker.js \
+            --min-instances 1 \
+            --max-instances 1 \
+            --concurrency 1 \
+            --cpu 1 \
+            --memory 512Mi \
+            --no-cpu-throttling \
+            --set-env-vars "WORKER_POLL_INTERVAL_MS=${WORKER_POLL_INTERVAL_MS}" \
+            --set-secrets "DATABASE_URL=${DATABASE_SECRET_NAME}:latest" \
+            ${{ steps.cloudsql.outputs.service_flag }}
